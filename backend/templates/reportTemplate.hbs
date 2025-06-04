@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html lang="ro">
+<head>
+  <meta charset="UTF-8">
+  <title>Raport subdiviziune</title>
+  <style>
+    body { font-family: Arial, sans-serif; margin: 40px; }
+    h2 { text-align: center; }
+    .descriere-indicator { margin-bottom: 10px; font-style: italic; }
+    table { width: 100%; border-collapse: collapse; margin-top: 30px; }
+    th, td { border: 1px solid #222; padding: 8px; }
+    th { background: #eee; }
+    tfoot td { font-weight: bold; }
+    .date { margin-top: 40px; text-align: right; font-size: 12px; }
+  </style>
+</head>
+<body>
+  <h2>Raport subdiviziune</h2>
+  
+  {{#each indicators}}
+    <div class="descriere-indicator">
+      <b>{{name}}:</b> {{description}}
+    </div>
+  {{/each}}
+
+  <table>
+    <thead>
+      <tr>
+        <th>{{subdivisionName}}</th>
+        <th>Numar</th>
+      </tr>
+    </thead>
+    <tbody>
+      {{#each indicators}}
+      <tr>
+        <td>{{name}}</td>
+        <td style="text-align:right;">{{total}}</td>
+      </tr>
+      {{/each}}
+    </tbody>
+    <tfoot>
+      <tr>
+        <td>TOTAL</td>
+        <td style="text-align:right;">{{totalGeneral}}</td>
+      </tr>
+    </tfoot>
+  </table>
+  <div class="date">Data: <b>{{dateString}}</b></div>
+</body>
+</html>

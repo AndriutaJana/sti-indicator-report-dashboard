@@ -1,0 +1,33 @@
+{
+  "name": "backend",
+  "version": "1.0.0",
+  "description": "",
+  "license": "ISC",
+  "author": "",
+  "type": "commonjs",
+  "main": "index.js",
+  "scripts": {
+    "start": "nodemon server.js",
+    "deploy": "node server.js"
+  },
+  "dependencies": {
+    "bcrypt": "^5.1.1",
+    "body-parser": "^2.2.0",
+    "cors": "^2.8.5",
+    "dotenv": "^16.5.0",
+    "exceljs": "^4.4.0",
+    "express": "^5.1.0",
+    "fast-csv": "^5.0.2",
+    "handlebars": "^4.7.8",
+    "json2csv": "^6.0.0-alpha.2",
+    "jsonwebtoken": "^9.0.2",
+    "jwt-decode": "^4.0.0",
+    "ldapjs": "^3.0.7",
+    "nodemon": "^3.1.9",
+    "pdfkit": "^0.17.1",
+    "pdfkit-table": "^0.1.99",
+    "pg": "^8.15.5",
+    "puppeteer": "^24.10.0",
+    "uuid": "^11.1.0"
+  }
+}
