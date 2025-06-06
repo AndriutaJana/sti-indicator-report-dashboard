@@ -157,6 +157,8 @@ const handleDownload = async (fileName) => {
     return;
   }
 
+
+
   try {
     const response = await api.get(
       `/reports/download/${encodeURIComponent(fileName)}`,
@@ -212,7 +214,31 @@ const Dashboard = () => {
   const [userProfile, setUserProfile] = useState(null);
   const navigate = useNavigate();
   const { currentUser, logout, loading: authLoading } = useAuth();
+  const [userRoleFilter, setUserRoleFilter] = useState("all");
+const [userStatusFilter, setUserStatusFilter] = useState("all");
+const [userSearch, setUserSearch] = useState("");
 
+
+const filteredUsers = users.filter((user) => {
+  const matchesRole =
+    userRoleFilter === "all" || user.role === userRoleFilter;
+  const matchesStatus =
+    userStatusFilter === "all" || user.status === userStatusFilter;
+  const matchesSearch =
+    user.name?.toLowerCase().includes(userSearch.toLowerCase()) ||
+    user.email?.toLowerCase().includes(userSearch.toLowerCase());
+  return matchesRole && matchesStatus && matchesSearch;
+});
+
+const deleteUser = async (id) => {
+  try {
+    await api.delete(`/users/${id}`);
+    setUsers((prev) => prev.filter((u) => u.id !== id));
+    message.success("Utilizator șters cu succes!");
+  } catch (err) {
+    message.error("Eroare la ștergerea utilizatorului");
+  }
+};
 
   useEffect(() => {
     if (!authLoading && activeTab === "admin" && currentUser?.role !== "admin") {
@@ -345,389 +371,312 @@ const Dashboard = () => {
     fetchReports();
   }, []);
 
-  useEffect(() => {
-    const fetchIndicatorRecords = async () => {
-      setLoading(true);
-      setError(null);
+const fetchIndicatorRecords = async () => {
+  setLoading(true);
+  setError(null);
 
-      try {
-        // Preluăm lista de indicatori pentru a obține numele
-        const indicatorsResponse = await api.get("/indicators");
-        const indicatorsMap = {};
-        if (Array.isArray(indicatorsResponse.data.data)) {
-          indicatorsResponse.data.data.forEach((indicator) => {
-            indicatorsMap[indicator.id] = indicator.name;
+  try {
+    const indicatorsResponse = await api.get("/indicators");
+    const indicatorsMap = {};
+    if (Array.isArray(indicatorsResponse.data.data)) {
+      indicatorsResponse.data.data.forEach((indicator) => {
+        indicatorsMap[indicator.id] = indicator.name;
+      });
+      setIndicators(indicatorsResponse.data.data); // Actualizăm lista de indicatori
+    }
+
+    const response = await api.get("/indicator-records");
+    if (response.status >= 200 && response.status < 300) {
+      if (Array.isArray(response.data.data)) {
+        let data = response.data.data.map((item) => ({
+          key: item.id,
+          subdiviziune: item.subdivision_id
+            ? getSubdivisionName(item.subdivision_id)
+            : item.indicator?.subdivision_id
+            ? getSubdivisionName(item.indicator.subdivision_id)
+            : "-",
+          subdiviziuneId:
+            item.subdivision_id || item.indicator?.subdivision_id || null,
+          indicator:
+            indicatorsMap[item.indicator_id] ||
+            item.indicator?.name ||
+            `Indicator ${item.indicator_id}` ||
+            "-",
+          valoare: item.value || 0,
+          data: item.record_date ? item.record_date.slice(0, 10) : "-",
+          utilizator: item.user_id || "-",
+        }));
+
+        // Aplicăm filtrele
+        if (selectedSubdivision !== "all") {
+          const subdivisionId = subdivisionData[selectedSubdivision]?.id;
+          data = data.filter((d) => d.subdiviziuneId === subdivisionId);
+        }
+
+        if (dateRange.length === 2) {
+          data = data.filter((d) => {
+            const date = new Date(d.data);
+            return date >= dateRange[0] && date <= dateRange[1];
           });
         }
 
-        const response = await api.get("/indicator-records");
-        if (response.status >= 200 && response.status < 300) {
-          if (Array.isArray(response.data.data)) {
-            let data = response.data.data.map((item) => ({
-              key: item.id, // Folosește item.id ca key
-              subdiviziune: item.subdivision_id
-                ? getSubdivisionName(item.subdivision_id)
-                : item.indicator?.subdivision_id
-                ? getSubdivisionName(item.indicator.subdivision_id)
-                : "-",
-              subdiviziuneId:
-                item.subdivision_id || item.indicator?.subdivision_id || null,
-              indicator:
-                indicatorsMap[item.indicator_id] ||
-                item.indicator?.name ||
-                `Indicator ${item.indicator_id}` ||
-                "-",
-              valoare: item.value || 0,
-              data: item.record_date ? item.record_date.slice(0, 10) : "-",
-              utilizator: item.user_id || "-",
-            }));
-
-            // Filtrare după subdiviziune
-            if (selectedSubdivision !== "all") {
-              const subdivisionId = subdivisionData[selectedSubdivision]?.id;
-              data = data.filter((d) => d.subdiviziuneId === subdivisionId);
-            }
-
-            // Filtrare după interval de date
-            if (dateRange.length === 2) {
-              data = data.filter((d) => {
-                const date = new Date(d.data);
-                return date >= dateRange[0] && date <= dateRange[1];
-              });
-            }
-
-            // Sortează descrescător după dată
-            data = data.sort((a, b) => new Date(b.data) - new Date(a.data));
-
-            setFilteredData(data);
-          } else {
-            console.error("Date neașteptate:", response.data);
-            setError("Format invalid al datelor primite");
-          }
-        } else {
-          throw new Error(`Request failed with status ${response.status}`);
-        }
-      } catch (err) {
-        console.error("Eroare API:", err);
-        setError("Eroare la încărcarea înregistrărilor");
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    fetchIndicatorRecords();
-  }, [selectedSubdivision, dateRange, refreshTrigger]); // Adaugă refreshTrigger ca dependență
-
-  // Filter dataSource (from indicators) by selection and date
-  // useEffect(() => {
-  //   let data = Array.isArray(indicators)
-  //     ? indicators.map(item => ({
-  //         key: item?.id || Math.random().toString(36).substring(2, 9),
-  //         subdiviziune: item?.subdivision_id ? getSubdivisionName(item.subdivision_id) : '-',
-  //         subdiviziuneId: item?.subdivision_id || null, // Keep the ID for filtering
-  //         indicator: item?.name || '-',
-  //         valoare: item?.value || 0,
-  //         data: item?.created_at ? item.created_at.slice(0,10) : '-',
-  //         utilizator: item?.user || '-'
-  //       }))
-  //     : [];
-
-  //   if (selectedSubdivision !== 'all') {
-  //     const subdivisionId = subdivisionData[selectedSubdivision]?.id;
-  //     data = data.filter(d => d.subdiviziuneId === subdivisionId);
-  //   }
-  //   if (dateRange.length === 2) {
-  //     data = data.filter(d => {
-  //       const date = new Date(d.data);
-  //       return date >= dateRange[0] && date <= dateRange[1];
-  //     });
-  //   }
-  //   setFilteredData(data);
-  // }, [indicators, selectedSubdivision, dateRange]);
-
-  // Submit new or updated indicator
-  const handleSubmitIndicator = async (values) => {
-    try {
-      if (!values.subdivision || !subdivisionData[values.subdivision]) {
-        message.error("Subdiviziunea selectată nu este validă!");
-        return;
-      }
-      const subdivisionId = subdivisionData[values.subdivision].id;
-
-      let indicatorNameToSend;
-      if (indicatorMode === "select") {
-        indicatorNameToSend = values.selectedIndicator;
+        data = data.sort((a, b) => new Date(b.data) - new Date(a.data));
+        setFilteredData(data);
       } else {
-        indicatorNameToSend = values.customIndicator;
+        throw new Error("Format invalid al datelor primite");
       }
+    } else {
+      throw new Error(`Request failed with status ${response.status}`);
+    }
+  } catch (err) {
+    console.error("Eroare API:", err);
+    message.error("Eroare la încărcarea înregistrărilor");
+  } finally {
+    setLoading(false);
+  }
+};
 
-      if (!indicatorNameToSend) {
-        message.error("Numele indicatorului este obligatoriu!");
-        return;
-      }
+useEffect(() => {
+  fetchIndicatorRecords();
+}, [selectedSubdivision, dateRange, refreshTrigger]);
 
-      if (!editingId && (!values.value || !values.recordDate)) {
-        message.error(
-          "Trebuie să completați valoarea și data pentru a adăuga un indicator!"
-        );
-        return;
-      }
+ 
 
-      let indicatorId = editingId;
 
-      // Salvează sau actualizează indicatorul
-      if (editingId) {
-        const response = await api.put(`/indicators/${editingId}`, {
-          name: indicatorNameToSend,
-          subdivision_id: subdivisionId,
-          measurement_unit: values.unit,
-          aggregation_type: values.type,
-          description: values.description,
-        });
-        message.success("Indicator actualizat cu succes!");
-        setIndicators((prev) =>
-          prev.map((item) =>
-            item.id === editingId
-              ? { ...item, ...response.data.indicator }
-              : item
-          )
-        );
+// Modificăm handleSubmitIndicator
+const handleSubmitIndicator = async (values) => {
+  try {
+    if (!values.subdivision || !subdivisionData[values.subdivision]) {
+      message.error("Subdiviziunea selectată nu este validă!");
+      return;
+    }
+    const subdivisionId = subdivisionData[values.subdivision].id;
+
+    let indicatorNameToSend;
+    if (indicatorMode === "select") {
+      indicatorNameToSend = values.selectedIndicator;
+    } else {
+      indicatorNameToSend = values.customIndicator;
+    }
+
+    if (!indicatorNameToSend) {
+      message.error("Numele indicatorului este obligatoriu!");
+      return;
+    }
+
+    let indicatorId = editingId;
+
+    // Salvează sau actualizează indicatorul
+    if (editingId) {
+      const response = await api.put(`/indicators/${editingId}`, {
+        name: indicatorNameToSend,
+        subdivision_id: subdivisionId,
+        measurement_unit: values.unit || "",
+        aggregation_type: values.type || "",
+        description: values.description || "",
+      });
+      message.success("Indicator actualizat cu succes!");
+    } else {
+      const response = await api.post("/indicators", {
+        name: indicatorNameToSend,
+        subdivision_id: subdivisionId,
+        measurement_unit: values.unit || "",
+        aggregation_type: values.type || "",
+        description: values.description || "",
+      });
+
+      let newIndicator;
+      if (response.data.indicator) {
+        newIndicator = response.data.indicator;
+      } else if (response.data.data) {
+        newIndicator = response.data.data;
+      } else if (response.data.id) {
+        newIndicator = response.data;
       } else {
-        const response = await api.post("/indicators", {
-          name: indicatorNameToSend,
-          subdivision_id: subdivisionId,
-          measurement_unit: values.unit,
-          aggregation_type: values.type,
-          description: values.description,
-        });
-
-        let newIndicator;
-        if (response.data.indicator) {
-          newIndicator = response.data.indicator;
-        } else if (response.data.data) {
-          newIndicator = response.data.data;
-        } else if (response.data.id) {
-          newIndicator = response.data;
-        } else {
-          throw new Error("Răspuns API invalid: indicatorul nu a fost găsit.");
-        }
-
-        if (!newIndicator.id) {
-          throw new Error("ID-ul indicatorului lipsește în răspuns.");
-        }
-
-        indicatorId = newIndicator.id;
-        message.success("Indicator salvat cu succes!");
-        setIndicators((prev) => [newIndicator, ...prev]);
+        throw new Error("Răspuns API invalid: indicatorul nu a fost găsit.");
       }
 
-      // Salvează sau actualizează înregistrarea în indicator_records
-      if (values.value && values.recordDate) {
-        // Validează datele
-        if (!Number.isFinite(Number(values.value))) {
-          message.error("Valoarea trebuie să fie un număr valid!");
-          return;
-        }
+      if (!newIndicator.id) {
+        throw new Error("ID-ul indicatorului lipsește în răspuns.");
+      }
 
-        // Verifică dacă recordDate este valid
-        const recordDate = values.recordDate ? moment(values.recordDate) : null;
-        if (!recordDate || !recordDate.isValid()) {
-          message.error("Data introdusă nu este validă!");
-          return;
-        }
+      indicatorId = newIndicator.id;
+      message.success("Indicator salvat cu succes!");
+    }
 
-        if (editingRecordId) {
-          // Verifică dacă editingRecordId există în baza de date
-          const checkResponse = await api.get(
-            `/indicator-records?indicator_id=${indicatorId}`
-          );
+    // Salvează sau actualizează înregistrarea în indicator_records
+    if (values.value && values.recordDate) {
+      if (!Number.isFinite(Number(values.value))) {
+        message.error("Valoarea trebuie să fie un număr valid!");
+        return;
+      }
+
+      const recordDate = values.recordDate ? moment(values.recordDate) : null;
+      if (!recordDate || !recordDate.isValid()) {
+        message.error("Data introdusă nu este validă!");
+        return;
+      }
+
+      if (editingRecordId) {
+        try {
+          const checkResponse = await api.get(`/indicator-records?indicator_id=${indicatorId}`);
           const recordExists = checkResponse.data.data.some(
             (record) => record.id === editingRecordId
           );
           if (!recordExists) {
-            console.warn(
-              "Înregistrarea cu ID-ul",
-              editingRecordId,
-              "nu există. Se va crea o nouă înregistrare."
-            );
-            setEditingRecordId(null); // Resetează editingRecordId dacă nu există
+            console.warn("Înregistrarea cu ID-ul", editingRecordId, "nu există. Se va crea o nouă înregistrare.");
+            setEditingRecordId(null);
           }
+        } catch (err) {
+          console.error("Eroare la verificarea înregistrării:", err);
+          message.error("Eroare la verificarea existenței înregistrării!");
+          return;
         }
-
-        if (editingRecordId) {
-          // Actualizează înregistrarea existentă
-          const recordResponse = await api.put(
-            `/indicator-records/${editingRecordId}`,
-            {
-              indicator_id: indicatorId,
-              value: Number(values.value),
-              record_date: recordDate.format("YYYY-MM-DD"), // Asigură-te că formatul este corect
-              notes: values.notes || null,
-            }
-          );
-
-          if (!recordResponse.data || !recordResponse.data.data) {
-            console.error(
-              "Răspuns API invalid pentru actualizarea înregistrării:",
-              recordResponse.data
-            );
-            message.error(
-              "Răspuns invalid de la server la actualizarea înregistrării."
-            );
-            return;
-          }
-
-          message.success("Înregistrare actualizată cu succes!");
-        } else {
-          // Creează o nouă înregistrare
-          const recordResponse = await api.post("/indicator-records", {
-            indicator_id: indicatorId,
-            value: Number(values.value),
-            record_date: recordDate.format("YYYY-MM-DD"),
-            notes: values.notes || null,
-          });
-
-          if (!recordResponse.data || !recordResponse.data.data) {
-            console.error(
-              "Răspuns API invalid pentru înregistrare:",
-              recordResponse.data
-            );
-            message.error(
-              "Răspuns invalid de la server la crearea înregistrării."
-            );
-            return;
-          }
-
-          message.success("Înregistrare salvată cu succes!");
-        }
-      } else if (!editingId) {
-        // Dacă nu sunt furnizate value și recordDate la adăugare, afișează eroare
-        message.error(
-          "Valoarea și data sunt obligatorii pentru o nouă înregistrare!"
-        );
-        return;
       }
 
-      // Reîmprospătează datele
-      setRefreshTrigger((prev) => prev + 1);
-      form.resetFields();
-      setIsModalOpen(false);
-      setEditingId(null);
-      setEditingRecordId(null);
-      setIndicatorMode("select");
-    } catch (err) {
-      console.error("Eroare detaliată:", err.response?.data || err);
-      if (err.response?.status === 409) {
-        message.error(
-          err.response.data?.message ||
-            "Indicatorul există deja pentru această subdiviziune!"
-        );
-      } else if (err.response?.status === 500) {
-        message.error(
-          `Eroare server: ${
-            err.response.data?.error ||
-            "Eroare internă la actualizarea înregistrării."
-          }`
-        );
+      if (editingRecordId) {
+        const recordResponse = await api.put(`/indicator-records/${editingRecordId}`, {
+          indicator_id: indicatorId,
+          value: Number(values.value),
+          record_date: recordDate.format("YYYY-MM-DD"),
+          notes: values.notes || null,
+        });
+
+        if (!recordResponse.data || !recordResponse.data.data) {
+          console.error("Răspuns API invalid pentru actualizarea înregistrării:", recordResponse.data);
+          message.error("Răspuns invalid de la server la actualizarea înregistrării.");
+          return;
+        }
+
+        message.success("Înregistrare actualizată cu succes!");
       } else {
-        message.error(
-          err.response?.data?.error ||
-            "A apărut o eroare la salvarea indicatorului sau înregistrării."
-        );
+        const recordResponse = await api.post("/indicator-records", {
+          indicator_id: indicatorId,
+          value: Number(values.value),
+          record_date: recordDate.format("YYYY-MM-DD"),
+          notes: values.notes || null,
+        });
+
+        if (!recordResponse.data || !recordResponse.data.data) {
+          console.error("Răspuns API invalid pentru înregistrare:", recordResponse.data);
+          message.error("Răspuns invalid de la server la crearea înregistrării.");
+          return;
+        }
+
+        message.success("Înregistrare salvată cu succes!");
       }
+    } else if (!editingId) {
+      message.error("Valoarea și data sunt obligatorii pentru o nouă înregistrare!");
+      return;
     }
-  };
+
+    // Reîmprospătăm datele
+    setRefreshTrigger((prev) => prev + 1); // Declanșăm reîncărcarea datelor
+    form.resetFields();
+    setIsModalOpen(false);
+    setEditingId(null);
+    setEditingRecordId(null);
+    setIndicatorMode("select");
+  } catch (err) {
+    console.error("Eroare detaliată:", err.response?.data || err);
+    if (err.response?.status === 409) {
+      message.error(err.response.data?.message || "Indicatorul există deja pentru această subdiviziune!");
+    } else if (err.response?.status === 500) {
+      message.error(`Eroare server: ${err.response.data?.error || "Eroare internă la actualizarea înregistrării."}`);
+    } else {
+      message.error(err.response?.data?.error || "A apărut o eroare la salvarea indicatorului sau înregistrării.");
+    }
+  }
+};
   // Handle edit button click
   const handleEdit = async (record) => {
-    console.log("Record primit în handleEdit:", record);
+ 
 
-    // Găsește subdiviziunea asociată indicatorului
-    const subdivisionName = Object.keys(subdivisionData).find(
-      (key) => subdivisionData[key].id === record.subdivision_id
-    );
-    console.log("Subdivision name:", subdivisionName);
+  // Verifică dacă record este valid
+  if (!record || !record.id) {
+    message.error("Datele indicatorului sunt invalide!");
+    return;
+  }
 
-    // Setează câmpurile formularului pentru indicator
-    form.setFieldsValue({
-      subdivision: subdivisionName,
-      unit: record.measurement_unit,
-      type: record.aggregation_type,
-      description: record.description,
-      indicatorMode: subdivisionIndicators[subdivisionName]?.includes(
-        record.name
-      )
-        ? "select"
-        : "custom",
-      selectedIndicator: subdivisionIndicators[subdivisionName]?.includes(
-        record.name
-      )
-        ? record.name
-        : undefined,
-      customIndicator: subdivisionIndicators[subdivisionName]?.includes(
-        record.name
-      )
-        ? undefined
-        : record.name,
-    });
+  // Găsește subdiviziunea asociată indicatorului
+  const subdivisionName = Object.keys(subdivisionData).find(
+    (key) => subdivisionData[key].id === record.subdivision_id
+  );
 
-    try {
-      // Obține înregistrările asociate indicatorului
-      const response = await api.get(
-        `/indicator-records?indicator_id=${record.id}`
-      );
-      console.log("Răspuns GET /indicator-records:", response.data.data);
-      console.log(
-        "IDs disponibile:",
-        response.data.data.map((r) => r.id)
-      );
+  if (!subdivisionName) {
+    message.error("Subdiviziunea nu a fost găsită!");
+    return;
+  }
 
-      if (response.data.data && response.data.data.length > 0) {
-        // Sortează înregistrările după dată (cea mai recentă)
-        const latestRecord = response.data.data.sort(
-          (a, b) => new Date(b.record_date) - new Date(a.record_date)
-        )[0];
-        console.log("Latest record:", latestRecord);
+  // Setează câmpurile formularului pentru indicator
+  form.setFieldsValue({
+    subdivision: subdivisionName,
+    unit: record.measurement_unit || "",
+    type: record.aggregation_type || "",
+    description: record.description || "",
+    indicatorMode: subdivisionIndicators[subdivisionName]?.includes(String(record.name || ""))
+      ? "select"
+      : "custom",
+    selectedIndicator: subdivisionIndicators[subdivisionName]?.includes(record.name)
+      ? record.name
+      : undefined,
+    customIndicator: subdivisionIndicators[subdivisionName]?.includes(record.name)
+      ? undefined
+      : record.name,
+  });
 
-        if (!latestRecord.id) {
-          console.error("Eroare: latestRecord nu are ID valid:", latestRecord);
-          message.error("Înregistrarea selectată nu are un ID valid.");
-          form.setFieldsValue({
-            value: undefined,
-            recordDate: undefined,
-            notes: undefined,
-          });
-          setEditingRecordId(null);
-        } else {
-          // Setează câmpurile formularului pentru înregistrare
-          form.setFieldsValue({
-            value: latestRecord.value,
-            recordDate: latestRecord.record_date
-              ? moment(latestRecord.record_date)
-              : null,
-            notes: latestRecord.notes || undefined,
-          });
-          setEditingRecordId(latestRecord.id);
-          console.log("editingRecordId setat:", latestRecord.id);
-        }
-      } else {
-        // Nu există înregistrări, setează formularul pentru o nouă înregistrare
-        console.warn(
-          "Nicio înregistrare găsită pentru indicator_id:",
-          record.id
-        );
-        message.info(
-          "Nicio înregistrare găsită. Puteți adăuga o nouă înregistrare."
-        );
+  try {
+    // Obține înregistrările asociate indicatorului
+    const response = await api.get(`/indicator-records?indicator_id=${record.id}`);
+   
+
+    // Verifică dacă răspunsul API este valid
+    if (!response.data || !Array.isArray(response.data.data)) {
+      console.error("Răspuns API invalid:", response.data);
+      message.error("Eroare la preluarea înregistrărilor: format invalid!");
+      form.setFieldsValue({
+        value: undefined,
+        recordDate: undefined,
+        notes: undefined,
+      });
+      setEditingRecordId(null);
+      return;
+    }
+
+    
+
+    const records = response.data.data;
+    console.log("IDs disponibile:", records.map((r) => r.id));
+
+    if (records.length > 0) {
+      // Sortează înregistrările după dată (cea mai recentă)
+      const latestRecord = records.sort(
+        (a, b) => new Date(b.record_date) - new Date(a.record_date)
+      )[0];
+      console.log("Latest record:", latestRecord);
+
+      if (!latestRecord.id) {
+        console.error("Eroare: latestRecord nu are ID valid:", latestRecord);
+        message.error("Înregistrarea selectată nu are un ID valid.");
         form.setFieldsValue({
           value: undefined,
           recordDate: undefined,
           notes: undefined,
         });
         setEditingRecordId(null);
+      } else {
+        // Setează câmpurile formularului pentru înregistrare
+        form.setFieldsValue({
+          value: latestRecord.value,
+          recordDate: latestRecord.record_date ? moment(latestRecord.record_date) : null,
+          notes: latestRecord.notes || undefined,
+        });
+        setEditingRecordId(latestRecord.id);
+        console.log("editingRecordId setat:", latestRecord.id);
       }
-    } catch (err) {
-      console.error("Eroare la preluarea înregistrării:", err);
-      message.error("Eroare la preluarea datelor înregistrării");
+    } else {
+      console.warn("Nicio înregistrare găsită pentru indicator_id:", record.id);
+      message.info("Nicio înregistrare găsită. Puteți adăuga o nouă înregistrare.");
       form.setFieldsValue({
         value: undefined,
         recordDate: undefined,
@@ -737,19 +686,29 @@ const Dashboard = () => {
     }
 
     setIndicatorMode(
-      subdivisionIndicators[subdivisionName]?.includes(record.name)
-        ? "select"
-        : "custom"
+      subdivisionIndicators[subdivisionName]?.includes(record.name) ? "select" : "custom"
     );
     setEditingId(record.id);
     setIsModalOpen(true);
-  };
+  } catch (err) {
+    console.error("Eroare la preluarea înregistrării:", err);
+    message.error("Eroare la preluarea datelor înregistrării");
+    form.setFieldsValue({
+      value: undefined,
+      recordDate: undefined,
+      notes: undefined,
+    });
+    setEditingRecordId(null);
+    setIsModalOpen(true); // Deschide modalul chiar și în caz de eroare pentru a permite editarea manuală
+  }
+};
   // Handle delete indicator
   const handleDelete = async (id) => {
     try {
       await api.delete(`/indicators/${id}`);
       message.success("Indicator șters cu succes!");
       setIndicators((prev) => prev.filter((item) => item.id !== id));
+      setRefreshTrigger((prev) => prev + 1);
     } catch (err) {
       console.error("Error deleting indicator:", err);
       message.error("Eroare la ștergerea indicatorului");
@@ -853,10 +812,44 @@ const Dashboard = () => {
               display: "flex",
               justifyContent: "space-between",
               marginBottom: 16,
+              flexWrap: "wrap",
+              gap: 8,
             }}
           >
             <h3>Gestionare utilizatori</h3>
-            <Button icon={<PlusOutlined />}>Adaugă utilizator</Button>
+             <Space>
+          <Select
+            value={userRoleFilter}
+            style={{ width: 140 }}
+            onChange={setUserRoleFilter}
+            placeholder="Filtru rol"
+            allowClear
+          >
+            <Option value="all">Toate rolurile</Option>
+            <Option value="admin">Admin</Option>
+            <Option value="user">User</Option>
+            {/* Adaugă alte roluri dacă există */}
+          </Select>
+          <Select
+            value={userStatusFilter}
+            style={{ width: 140 }}
+            onChange={setUserStatusFilter}
+            placeholder="Filtru status"
+            allowClear
+          >
+            <Option value="all">Toate statusurile</Option>
+            <Option value="active">Activ</Option>
+            <Option value="inactive">Inactiv</Option>
+            {/* Adaugă alte statusuri dacă există */}
+          </Select>
+          <Input.Search
+            placeholder="Caută nume/email"
+            allowClear
+            value={userSearch}
+            onChange={e => setUserSearch(e.target.value)}
+            style={{ width: 200 }}
+          />
+        </Space>
           </div>
           <Table
             columns={[

@@ -24,7 +24,7 @@ const Hero = () => {
           {/* CTA Button */}
          <button 
             onClick={() => navigate('/dashboard')} // Redirecționează către /dashboard
-            className="inline-block bg-white text-[#1D4CA0] px-6 py-3 rounded-md mb-12 text-lg font-medium transition hover:bg-blue-50"
+            className="inline-block bg-white text-[#1D4CA0] px-6 py-3 rounded-md mb-12 text-lg font-medium transition hover:bg-blue-50 cursor-pointer"
           >
             Începe Monitorizarea
           </button> 
