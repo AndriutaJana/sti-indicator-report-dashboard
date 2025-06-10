@@ -1,0 +1,92 @@
+<!DOCTYPE html>
+<html lang="ro">
+<head>
+  <meta charset="UTF-8" />
+  <title>Raport {{periodName}} pentru toate subdiviziunile</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      margin: 40px;
+      font-size: 12px;
+    }
+    h1, h2 {
+      text-align: center;
+      color: initial;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 20px;
+      margin-bottom: 30px;
+    }
+    th, td {
+      border: 1px solid #333;
+      padding: 8px;
+      text-align: left;
+    }
+    th {
+      background-color: #eee;
+    }
+    tr.total-row {
+      font-weight: bold;
+      background-color: #f0f0f0;
+    }
+    .page-break {
+      page-break-before: always;
+    }
+    ul {
+      margin-top: 0;
+      margin-bottom: 20px;
+      padding-left: 20px;
+    }
+    .date {
+      text-align: right;
+      margin-top: 40px;
+    }
+  </style>
+</head>
+<body>
+
+  <h1>Raport {{periodName}} pentru toate subdiviziunile</h1>
+
+  {{#each subdivisions}}
+    <div class="page-break"></div>
+    <h2>Subdiviziune: {{subdivisionName}}</h2>
+    
+    {{#if activities.length}}
+      <h3>Activități desfășurate:</h3>
+      <ul>
+        {{#each activities}}
+          <li>{{this}}</li>
+        {{/each}}
+      </ul>
+    {{/if}}
+
+    <table>
+      <thead>
+        <tr>
+          <th>Indicator</th>
+          <th>Total</th>
+        </tr>
+      </thead>
+      <tbody>
+        {{#each indicators}}
+          <tr>
+            <td>{{name}}</td>
+            <td>{{total}}</td>
+          </tr>
+        {{/each}}
+        <tr class="total-row">
+          <td>TOTAL</td>
+          <td>{{totalGeneral}}</td>
+        </tr>
+      </tbody>
+    </table>
+  {{/each}}
+
+  <div class="date">
+    Data: {{date}}
+  </div>
+
+</body>
+</html>

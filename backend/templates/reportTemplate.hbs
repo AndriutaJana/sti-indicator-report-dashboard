@@ -15,13 +15,13 @@
 <body>
   <h1>Raport subdiviziune: {{subdivisionName}}</h1>
   <h2>Perioada: {{periodName}}</h2>
-  {{#if description}}
-  <h3>Activități suplimentare:</h3>
-  <ul>
-    {{#each description}}
-      <li>{{this}}</li>
-    {{/each}}
-  </ul>
+  {{#if activities.length}}
+<h3>Activități desfășurate:</h3>
+<ul>
+  {{#each activities}}
+    <li>{{this}}</li>
+  {{/each}}
+</ul>
 {{/if}}
   <table>
     <thead>
@@ -44,7 +44,7 @@
     </tbody>
   </table>
   <div style="text-align:right; margin-top:40px;">
-    Data generării: {{date}}
+    Data: {{date}}
   </div>
 </body>
 </html>

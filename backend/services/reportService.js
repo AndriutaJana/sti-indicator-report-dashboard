@@ -15,7 +15,7 @@ class ReportService {
     );
     
     if (!indicators.rows.length) {
-      throw new Error('Nu există indicatori pentru această subdiviziune');
+      return null;
     }
     
     // Obține înregistrările pentru perioada specificată
@@ -30,6 +30,148 @@ class ReportService {
     
     return { indicators: indicators.rows, records: records.rows };
   }
+
+
+  static async generateAllSubdivisionReports(periodType, description, activities = []) {
+  try {
+    let periodStart = new Date();
+    let periodName = '';
+    switch (periodType) {
+      case 'weekly':
+        periodStart.setDate(periodStart.getDate() - 7);
+        periodName = 'săptămânal';
+        break;
+      case 'quarterly':
+        periodStart.setMonth(periodStart.getMonth() - 3);
+        periodName = 'trimestrial';
+        break;
+      case 'annual':
+        periodStart.setFullYear(periodStart.getFullYear() - 1);
+        periodName = 'anual';
+        break;
+      default:
+        throw new Error('Tip raport invalid');
+    }
+
+    const subdivisions = await query('SELECT id, name FROM subdivisions');
+    if (!subdivisions.rows.length) throw new Error('Nu există subdiviziuni');
+
+    const allData = [];
+
+    for (const subdivision of subdivisions.rows) {
+      const data = await this.getReportData(subdivision.id, periodStart);
+      if (!data) {
+        console.log(`Sărim peste subdiviziunea ${subdivision.name} deoarece nu există indicatori.`);
+        continue; // sarim peste subdiviziunile fără indicatori
+      }
+      allData.push({
+        subdivisionId: subdivision.id,
+        subdivisionName: subdivision.name,
+        data,
+        activities
+      });
+    }
+
+    // Dacă nu avem niciun raport, poate raportăm asta explicit:
+    if (!allData.length) {
+      throw new Error('Nu există date pentru nici o subdiviziune în perioada selectată.');
+    }
+
+    const reportsDir = path.join(__dirname, '../../reports');
+    if (!fs.existsSync(reportsDir)) {
+      fs.mkdirSync(reportsDir, { recursive: true });
+    }
+
+    const baseFileName = `raport_toate_subdiviziunile_${periodName}_${new Date().toISOString().split('T')[0]}`;
+    const pdfFile = path.join(reportsDir, `${baseFileName}.pdf`);
+    const excelFile = path.join(reportsDir, `${baseFileName}.xlsx`);
+
+    await Promise.all([
+      this.generateCombinedPdf(allData, pdfFile, periodName, description, activities),
+      this.generateCombinedExcel(allData, excelFile)
+    ]);
+
+    return {
+      downloadUrls: {
+        pdf: `${baseFileName}.pdf`,
+        excel: `${baseFileName}.xlsx`
+      },
+      subdivisionCount: allData.length
+    };
+  } catch (err) {
+    console.error('Eroare la generare raport total:', err);
+    throw err;
+  }
+}
+
+
+static async generateCombinedPdf(allData, fileName, periodName, description) {
+  const templatePath = path.join(__dirname, '../templates/multiSubdivisionTemplate.hbs');
+  const templateSource = fs.readFileSync(templatePath, 'utf8');
+  const template = Handlebars.compile(templateSource);
+
+  const content = allData.map(({ subdivisionName, data }) => {
+    let totalGeneral = 0;
+    const indicators = data.indicators.map(indicator => {
+      const indicatorRecords = data.records.filter(r => r.indicator_id === indicator.id);
+      const total = indicatorRecords.reduce((sum, r) => sum + parseFloat(r.value), 0);
+      totalGeneral += total;
+      return { name: indicator.name, total };
+    });
+
+    return {
+      subdivisionName,
+      indicators,
+      totalGeneral,
+      activities
+    };
+  });
+
+  const html = template({
+    periodName,
+    description: Array.isArray(description) ? description : (description ? [description] : []),
+    date: new Date().toLocaleString('ro-RO'),
+    subdivisions: content,
+    activities
+  });
+
+  const browser = await puppeteer.launch({ headless: "new" });
+  const page = await browser.newPage();
+  await page.setContent(html, { waitUntil: 'networkidle0' });
+  await page.pdf({ path: fileName, format: 'A4', printBackground: true });
+  await browser.close();
+}
+
+static async generateCombinedExcel(allData, fileName) {
+  const workbook = new ExcelJS.Workbook();
+  
+  for (const { subdivisionName, data } of allData) {
+    const worksheet = workbook.addWorksheet(subdivisionName.substring(0, 31)); // max 31 chars
+
+    worksheet.columns = [
+      { header: 'Indicator', key: 'indicator', width: 50 },
+      { header: 'Total', key: 'total', width: 15 }
+    ];
+
+    let totalGeneral = 0;
+
+    for (const indicator of data.indicators) {
+      const indicatorRecords = data.records.filter(r => r.indicator_id === indicator.id);
+      const total = indicatorRecords.reduce((sum, r) => sum + parseFloat(r.value), 0);
+
+      worksheet.addRow({ indicator: indicator.name, total });
+      totalGeneral += total;
+    }
+
+    worksheet.addRow({ indicator: 'TOTAL', total: totalGeneral });
+    worksheet.lastRow.font = { bold: true };
+    worksheet.addRow({});
+    worksheet.addRow({ indicator: 'Data:', total: new Date().toLocaleString('ro-RO') });
+  }
+
+  await workbook.xlsx.writeFile(fileName);
+}
+
 
   // Generare Excel
   static async generateExcelReport(data, fileName) {
@@ -76,7 +218,7 @@ class ReportService {
   }
 
   // Generare PDF din HTML cu Handlebars și Puppeteer
-  static async generateHtmlPdfReport(data, fileName, subdivisionName, periodName, description) {
+  static async generateHtmlPdfReport(data, fileName, subdivisionName, periodName, description, activities) {
     const templatePath = path.join(__dirname, '../templates/reportTemplate.hbs');
     const templateSource = fs.readFileSync(templatePath, 'utf8');
     const template = Handlebars.compile(templateSource);
@@ -98,6 +240,7 @@ class ReportService {
       totalGeneral,
       date: new Date().toLocaleString('ro-RO'),
       description: description || [],
+      activities: activities || []
     });
 
     const browser = await puppeteer.launch({ headless: "new" });
@@ -110,7 +253,7 @@ class ReportService {
   }
 
   // Metodă unificată pentru generare raport
-  static async generateReport(subdivisionId, periodType, description) {
+  static async generateReport(subdivisionId, periodType, description, activities = []) {
     try {
       // Determină perioada în funcție de tipul raportului
       let periodStart = new Date();
@@ -159,7 +302,7 @@ class ReportService {
 
       await Promise.all([
         this.generateExcelReport(data, excelFile, subdivisionName),
-        this.generateHtmlPdfReport(data, pdfFile, subdivisionName, periodName, description)
+        this.generateHtmlPdfReport(data, pdfFile, subdivisionName, periodName, description, activities)
       ]);
 
       return {

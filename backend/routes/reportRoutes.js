@@ -11,11 +11,15 @@ router.post('/quarterly', authMiddleware.authenticate, reportController.generate
 
 // Generare raport anual (necesită autentificare)
 router.post('/annual', authMiddleware.authenticate, reportController.generateAnnualReport);
+router.post('/all', authMiddleware.authenticate, reportController.generateAllReports);
 
 // Listare rapoarte (necesită autentificare)
 router.get('/', authMiddleware.authenticate, reportController.listReports);
 
 // Descărcare raport (necesită autentificare)
 router.get('/download/:fileName', authMiddleware.authenticate, reportController.downloadReport);
+
+
+
 
 module.exports = router;

@@ -49,7 +49,9 @@ import {
   Space,
   Popconfirm,
   Radio,
+  List
 } from "antd";
+
 
 const { Header: AntHeader, Sider, Content } = Layout;
 const { Option } = Select;
@@ -217,7 +219,17 @@ const Dashboard = () => {
   const [userRoleFilter, setUserRoleFilter] = useState("all");
 const [userStatusFilter, setUserStatusFilter] = useState("all");
 const [userSearch, setUserSearch] = useState("");
+const [activities, setActivities] = useState([]);
+const [newActivity, setNewActivity] = useState('');
+const [isActivityModalVisible, setIsActivityModalVisible] = useState(false);
 
+
+const handleAddActivity = () => {
+  if (newActivity.trim()) {
+    setActivities([...activities, newActivity]);
+    setNewActivity('');
+  }
+};
 
 const filteredUsers = users.filter((user) => {
   const matchesRole =
@@ -239,6 +251,41 @@ const deleteUser = async (id) => {
     message.error("Eroare la ștergerea utilizatorului");
   }
 };
+
+const generateAllReports = async () => {
+  try {
+    setIsActivityModalVisible(true); // Deschide modalul și pentru rapoartele multiple
+  } catch (error) {
+    console.error("Eroare:", error);
+  }
+};
+
+const confirmGenerateAllReports = async () => {
+  try {
+    setLoading(true);
+    const response = await api.post("/reports/all", {
+      periodType: reportPeriod,
+      activities: activities // Trimite activitățile către backend
+    });
+    
+    const report = {
+      key: Date.now(),
+      title: `Raport ${reportPeriod} - Toate subdiviziunile`,
+      date: new Date().toISOString(),
+      downloadUrls: response.data.downloadUrls,
+      activities: activities // Salvează activitățile în starea locală
+    };
+
+    setReports((prev) => [report, ...prev]);
+    setIsActivityModalVisible(false);
+    setActivities([]);
+  } catch (error) {
+    console.error("Eroare la generarea rapoartelor multiple:", error);
+  } finally {
+    setLoading(false);
+  }
+};
+
 
   useEffect(() => {
     if (!authLoading && activeTab === "admin" && currentUser?.role !== "admin") {
@@ -717,40 +764,52 @@ const handleSubmitIndicator = async (values) => {
 
   // Generate dummy report
   const generateReport = async () => {
-    try {
-      if (reportSubdivision === "all") {
-        message.error("Selectați o subdiviziune pentru raport!");
-        return;
-      }
-
-      setLoading(true);
-      const subdivisionId = subdivisionData[reportSubdivision].id;
-
-      const endpoint = `/reports/${reportPeriod}`;
-
-      const response = await api.post(endpoint, {
-        subdivision_id: subdivisionId,
-      });
-
-      // Adaugă raportul nou în starea reports, respectând formatul din baza de date
-      const newReport = {
-        id: response.data.id || Date.now(), // Folosește ID-ul din răspuns dacă există
-        title: `Raport ${periodMapping[reportPeriod]} - ${reportSubdivision}`,
-        date: new Date().toISOString(),
-        key: `report-${Date.now()}`,
-        fileName: response.data.downloadUrls.pdf, // Presupunem că vrei PDF-ul ca fileName principal
-        downloadUrls: response.data.downloadUrls,
-      };
-
-      setReports((prev) => [newReport, ...prev]);
-      message.success("Raport generat cu succes!");
-    } catch (err) {
-      console.error("Eroare generare raport:", err);
-      message.error("Eroare la generarea raportului");
-    } finally {
-      setLoading(false);
+  try {
+    if (reportSubdivision === "all") {
+      message.error("Selectați o subdiviziune pentru raport!");
+      return;
     }
-  };
+
+    setIsActivityModalVisible(true); // Deschide modalul pentru activități
+  } catch (err) {
+    console.error("Eroare:", err);
+    message.error("Eroare la pregătirea raportului");
+  }
+};
+
+const confirmGenerateReport = async () => {
+  try {
+    setLoading(true);
+    const subdivisionId = subdivisionData[reportSubdivision].id;
+
+    const endpoint = `/reports/${reportPeriod}`;
+
+    const response = await api.post(endpoint, {
+      subdivision_id: subdivisionId,
+      activities: activities // Trimite activitățile către backend
+    });
+
+    const newReport = {
+      id: response.data.id || Date.now(),
+      title: `Raport ${periodMapping[reportPeriod]} - ${reportSubdivision}`,
+      date: new Date().toISOString(),
+      key: `report-${Date.now()}`,
+      fileName: response.data.downloadUrls.pdf,
+      downloadUrls: response.data.downloadUrls,
+      activities: activities // Salvează activitățile în starea locală
+    };
+
+    setReports((prev) => [newReport, ...prev]);
+    message.success("Raport generat cu succes!");
+    setIsActivityModalVisible(false);
+    setActivities([]);
+  } catch (err) {
+    console.error("Eroare generare raport:", err);
+    message.error("Eroare la generarea raportului");
+  } finally {
+    setLoading(false);
+  }
+};
 
   const filteredReports = reports.filter((report) => {
     if (reportSubdivision === "all") return true;
@@ -1466,101 +1525,167 @@ const handleSubmitIndicator = async (values) => {
           )}
 
           {activeTab === "reports" && (
-            <>
-              <div
-                style={{
-                  display: "flex",
-                  justifyContent: "space-between",
-                  marginBottom: 16,
-                }}
-              >
-                <h2>Rapoarte generate</h2>
-                <Space>
-                  <Select
-                    value={reportSubdivision}
-                    style={{ width: 200 }}
-                    onChange={setReportSubdivision}
-                    placeholder="Selectează subdiviziunea"
-                  >
-                    <Option value="all">Toate subdiviziunile</Option>
-                    {Object.keys(subdivisionData).map((s) => (
-                      <Option key={`report-subdiv-${s}`} value={s}>
-                        {s}
-                      </Option>
-                    ))}
-                  </Select>
-                  <Select
-                    value={reportPeriod}
-                    style={{ width: 150 }}
-                    onChange={setReportPeriod}
-                  >
-                    <Option value="weekly">Săptămânal</Option>
-                    <Option value="quarterly">Trimestrial</Option>
-                    <Option value="annual">Anual</Option>
-                  </Select>
-                  <Button
-                    type="primary"
-                    icon={<DownloadOutlined />}
-                    onClick={generateReport}
-                    loading={loading}
-                    disabled={reportSubdivision === "all"}
-                  >
-                    Generează raport
-                  </Button>
-                </Space>
-              </div>
-              <Table
-                dataSource={filteredReports}
-                columns={[
-                  { title: "Titlu", dataIndex: "title", key: "title" },
-                  {
-                    title: "Data",
-                    dataIndex: "date",
-                    key: "date",
-                    render: (date) => {
-                      if (!date) return "-";
-                      const d = new Date(date);
-                      const day = String(d.getDate()).padStart(2, "0");
-                      const month = String(d.getMonth() + 1).padStart(2, "0");
-                      const year = d.getFullYear();
-                      return `${day}.${month}.${year}`;
-                    },
-                  },
-                  {
-                    title: "Descărcare",
-                    key: "download",
-                    render: (_, record) => (
-                      <Space>
-                        {record.downloadUrls?.pdf && (
-                          <Button
-                            key="pdf"
-                            icon={<DownloadOutlined />}
-                            onClick={() =>
-                              handleDownload(record.downloadUrls.pdf)
-                            }
-                          >
-                            PDF
-                          </Button>
-                        )}
-                        {record.downloadUrls?.excel && (
-                          <Button
-                            key="excel"
-                            icon={<DownloadOutlined />}
-                            onClick={() =>
-                              handleDownload(record.downloadUrls.excel)
-                            }
-                          >
-                            Excel
-                          </Button>
-                        )}
-                      </Space>
-                    ),
-                  },
-                ]}
-                rowKey="key"
-              />
-            </>
-          )}
+  <>
+    {isActivityModalVisible && (
+  <Modal
+   title={`Adăugare activități pentru raport ${periodMapping[reportPeriod] || reportPeriod}`}
+    open={isActivityModalVisible}
+    onOk={reportSubdivision === "all" ? confirmGenerateAllReports : confirmGenerateReport}
+    onCancel={() => {
+      setIsActivityModalVisible(false);
+      setActivities([]);
+      setNewActivity('');
+    }}
+    okText="Generează raport"
+    cancelText="Anulează"
+    confirmLoading={loading}
+    width={700}
+  >
+    <div style={{ marginBottom: 16 }}>
+      <Input.TextArea
+        value={newActivity}
+        onChange={(e) => setNewActivity(e.target.value)}
+        placeholder="Descrie activitatea (ex: 'Organizat training pentru echipă')"
+        rows={3}
+      />
+      <Button
+        type="dashed"
+        onClick={handleAddActivity}
+        icon={<PlusOutlined />}
+        style={{ marginTop: 8 }}
+      >
+        Adaugă activitate
+      </Button>
+    </div>
+
+    <List
+      bordered
+      dataSource={activities}
+      renderItem={(item, index) => (
+        <List.Item
+          actions={[
+            <Button
+              icon={<DeleteOutlined />}
+              onClick={() => setActivities(activities.filter((_, i) => i !== index))}
+              danger
+              size="small"
+            />
+          ]}
+        >
+          {item}
+        </List.Item>
+      )}
+    />
+  </Modal>
+)}
+
+    <div
+      style={{
+        display: "flex",
+        justifyContent: "space-between",
+        marginBottom: 16,
+      }}
+    >
+      <h2>Rapoarte generate</h2>
+      <Space>
+        <Select
+          value={reportSubdivision}
+          style={{ width: 200 }}
+          onChange={setReportSubdivision}
+          placeholder="Selectează subdiviziunea"
+        >
+          <Option value="all">Toate subdiviziunile</Option>
+          {Object.keys(subdivisionData).map((s) => (
+            <Option key={`report-subdiv-${s}`} value={s}>
+              {s}
+            </Option>
+          ))}
+        </Select>
+        <Select
+          value={reportPeriod}
+          style={{ width: 150 }}
+          onChange={setReportPeriod}
+        >
+          <Option value="weekly">Săptămânal</Option>
+          <Option value="quarterly">Trimestrial</Option>
+          <Option value="annual">Anual</Option>
+        </Select>
+        <Button
+          type="primary"
+          icon={<DownloadOutlined />}
+          onClick={() => setIsActivityModalVisible(true)}
+          loading={loading}
+        >
+          {reportSubdivision === "all" 
+            ? "Generează toate rapoartele" 
+            : "Generează raport"}
+        </Button>
+      </Space>
+    </div>
+    <Table
+      dataSource={filteredReports}
+      columns={[
+        { 
+          title: "Titlu", 
+          dataIndex: "title", 
+          key: "title",
+          render: (title, record) => (
+            <div>
+              <div>{title}</div>
+              {record.activities && record.activities.length > 0 && (
+                <div style={{ marginTop: 4 }}>
+                  <small style={{ color: '#666' }}>
+                    <strong>Activități:</strong> {record.activities.join(', ')}
+                  </small>
+                </div>
+              )}
+            </div>
+          )
+        },
+        {
+          title: "Data",
+          dataIndex: "date",
+          key: "date",
+          render: (date) => {
+            if (!date) return "-";
+            const d = new Date(date);
+            const day = String(d.getDate()).padStart(2, "0");
+            const month = String(d.getMonth() + 1).padStart(2, "0");
+            const year = d.getFullYear();
+            return `${day}.${month}.${year}`;
+          },
+        },
+        {
+          title: "Descărcare",
+          key: "download",
+          render: (_, record) => (
+            <Space>
+              {record.downloadUrls?.pdf && (
+                <Button
+                  key="pdf"
+                  icon={<DownloadOutlined />}
+                  onClick={() => handleDownload(record.downloadUrls.pdf)}
+                >
+                  PDF
+                </Button>
+              )}
+              {record.downloadUrls?.excel && (
+                <Button
+                  key="excel"
+                  icon={<DownloadOutlined />}
+                  onClick={() => handleDownload(record.downloadUrls.excel)}
+                >
+                  Excel
+                </Button>
+              )}
+            </Space>
+          ),
+        },
+      ]}
+      rowKey="key"
+    />
+  </>
+)}
 
           {activeTab === "admin" && (
             <Tabs defaultActiveKey="users" items={adminTabsItems} />
