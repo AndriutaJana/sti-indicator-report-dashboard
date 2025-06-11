@@ -105,12 +105,14 @@ class ReportService {
 }
 
 
-static async generateCombinedPdf(allData, fileName, periodName, description) {
+
+
+static async generateCombinedPdf(allData, fileName, periodName, description, activities = []) {
   const templatePath = path.join(__dirname, '../templates/multiSubdivisionTemplate.hbs');
   const templateSource = fs.readFileSync(templatePath, 'utf8');
   const template = Handlebars.compile(templateSource);
 
-  const content = allData.map(({ subdivisionName, data }) => {
+  const content = allData.map(({ subdivisionName, data, activities: subdivisionActivities }) => {
     let totalGeneral = 0;
     const indicators = data.indicators.map(indicator => {
       const indicatorRecords = data.records.filter(r => r.indicator_id === indicator.id);
@@ -123,16 +125,22 @@ static async generateCombinedPdf(allData, fileName, periodName, description) {
       subdivisionName,
       indicators,
       totalGeneral,
-      activities
+      activities: subdivisionActivities || activities || [] // Folosește activities din subdiviziune sau parametrul general
     };
   });
 
   const html = template({
     periodName,
     description: Array.isArray(description) ? description : (description ? [description] : []),
-    date: new Date().toLocaleString('ro-RO'),
+    date: new Date().toLocaleString('ro-RO', {
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit'
+}),
     subdivisions: content,
-    activities
+    activities: activities || [] // Transmite activities și la nivel global
   });
 
   const browser = await puppeteer.launch({ headless: "new" });
@@ -166,7 +174,18 @@ static async generateCombinedExcel(allData, fileName) {
     worksheet.addRow({ indicator: 'TOTAL', total: totalGeneral });
     worksheet.lastRow.font = { bold: true };
     worksheet.addRow({});
-    worksheet.addRow({ indicator: 'Data:', total: new Date().toLocaleString('ro-RO') });
+    worksheet.addRow({
+    indicator: 'Data:',
+    total: new Date().toLocaleString('ro-RO', {
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit'
+  })
+});
+
+
   }
 
   await workbook.xlsx.writeFile(fileName);

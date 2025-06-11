@@ -217,17 +217,62 @@ const Dashboard = () => {
   const navigate = useNavigate();
   const { currentUser, logout, loading: authLoading } = useAuth();
   const [userRoleFilter, setUserRoleFilter] = useState("all");
-const [userStatusFilter, setUserStatusFilter] = useState("all");
-const [userSearch, setUserSearch] = useState("");
-const [activities, setActivities] = useState([]);
-const [newActivity, setNewActivity] = useState('');
-const [isActivityModalVisible, setIsActivityModalVisible] = useState(false);
+  const [userStatusFilter, setUserStatusFilter] = useState("all");
+  const [userSearch, setUserSearch] = useState("");
+  const [activities, setActivities] = useState([]);
+  const [newActivity, setNewActivity] = useState('');
+  const [isActivityModalVisible, setIsActivityModalVisible] = useState(false);
+  const [userActivities, setUserActivities] = useState([]);
+  const [selectedUserId, setSelectedUserId] = useState(null);
+  const [activityLoading, setActivityLoading] = useState(false);
+
+
+const fetchUserActivities = async (userId) => {
+    if (!userId) {
+      setUserActivities([]);
+      return;
+    }
+
+    setActivityLoading(true);
+    try {
+      const response = await api.get(`/users/${userId}/activity`);
+      if (response.status >= 200 && response.status < 300) {
+        if (Array.isArray(response.data.data)) {
+          setUserActivities(
+            response.data.data.map((activity) => ({
+              key: activity.id,
+              action: activity.action,
+              timestamp: activity.timestamp,
+              details: activity.details || "-",
+            }))
+          );
+        } else {
+          throw new Error("Format invalid al datelor primite");
+        }
+      } else {
+        throw new Error(`Request failed with status ${response.status}`);
+      }
+    } catch (err) {
+      console.error("Eroare la preluarea istoricului:", err);
+      message.error("Eroare la încărcarea istoricului acțiunilor");
+      setUserActivities([]);
+    } finally {
+      setActivityLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchUserActivities(selectedUserId);
+  }, [selectedUserId]);
 
 
 const handleAddActivity = () => {
   if (newActivity.trim()) {
-    setActivities([...activities, newActivity]);
+    const trimmedActivity = newActivity.trim().slice(0, 500); // Trunchiază la 500 de caractere
+    setActivities([...activities, trimmedActivity]);
     setNewActivity('');
+  } else {
+    message.error("Activitatea nu poate fi goală!");
   }
 };
 
@@ -265,27 +310,35 @@ const confirmGenerateAllReports = async () => {
     setLoading(true);
     const response = await api.post("/reports/all", {
       periodType: reportPeriod,
-      activities: activities // Trimite activitățile către backend
+      activities: activities
     });
     
-    const report = {
+    if (!response.data?.downloadUrls) {
+      throw new Error("Răspuns invalid de la server");
+    }
+
+    const newReport = {
       key: Date.now(),
-      title: `Raport ${reportPeriod} - Toate subdiviziunile`,
+      title: `Raport ${periodMapping[reportPeriod] || reportPeriod} - Toate subdiviziunile`,
       date: new Date().toISOString(),
       downloadUrls: response.data.downloadUrls,
-      activities: activities // Salvează activitățile în starea locală
+      activities: activities
     };
 
-    setReports((prev) => [report, ...prev]);
-    setIsActivityModalVisible(false);
-    setActivities([]);
+    setReports((prev) => [newReport, ...prev]);
+    message.success("Rapoarte generate cu succes!");
   } catch (error) {
-    console.error("Eroare la generarea rapoartelor multiple:", error);
+    console.error("Eroare detaliată:", error.response?.data || error.message);
+    message.error(
+      error.response?.data?.message || 
+      "Eroare la generarea rapoartelor. Verifică consola pentru detalii."
+    );
   } finally {
     setLoading(false);
+    setIsActivityModalVisible(false);
+    setActivities([]);
   }
 };
-
 
   useEffect(() => {
     if (!authLoading && activeTab === "admin" && currentUser?.role !== "admin") {
@@ -390,6 +443,18 @@ const confirmGenerateAllReports = async () => {
                 ? report.title.replace(period, periodMapping[period])
                 : report.title;
 
+
+                let activities = [];
+                if (report.activities) {
+                  try {
+                    activities = Array.isArray(report.activities)
+                      ? report.activities
+                      : JSON.parse(report.activities);
+                  } catch {
+                    activities = [];
+                }
+            }
+
               return {
                 id: report.id,
                 title: translatedTitle,
@@ -397,6 +462,7 @@ const confirmGenerateAllReports = async () => {
                 key: `report-${report.id}`,
                 fileName: JSON.parse(report.file_path).pdf,
                 downloadUrls: JSON.parse(report.file_path),
+                activities,
               };
             });
             setReports(formattedReports);
@@ -861,85 +927,149 @@ const confirmGenerateReport = async () => {
 
   // Configurare Tabs pentru secțiunea de administrare
   const adminTabsItems = [
-    {
-      key: "users",
-      label: "Utilizatori",
-      children: (
-        <>
-          <div
-            style={{
-              display: "flex",
-              justifyContent: "space-between",
-              marginBottom: 16,
-              flexWrap: "wrap",
-              gap: 8,
-            }}
-          >
-            <h3>Gestionare utilizatori</h3>
-             <Space>
-          <Select
-            value={userRoleFilter}
-            style={{ width: 140 }}
-            onChange={setUserRoleFilter}
-            placeholder="Filtru rol"
-            allowClear
-          >
-            <Option value="all">Toate rolurile</Option>
-            <Option value="admin">Admin</Option>
-            <Option value="user">User</Option>
-            {/* Adaugă alte roluri dacă există */}
-          </Select>
-          <Select
-            value={userStatusFilter}
-            style={{ width: 140 }}
-            onChange={setUserStatusFilter}
-            placeholder="Filtru status"
-            allowClear
-          >
-            <Option value="all">Toate statusurile</Option>
-            <Option value="active">Activ</Option>
-            <Option value="inactive">Inactiv</Option>
-            {/* Adaugă alte statusuri dacă există */}
-          </Select>
-          <Input.Search
-            placeholder="Caută nume/email"
-            allowClear
-            value={userSearch}
-            onChange={e => setUserSearch(e.target.value)}
-            style={{ width: 200 }}
-          />
-        </Space>
-          </div>
-          <Table
-            columns={[
-              { title: "Nume", dataIndex: "name", key: "name" },
-              { title: "Email", dataIndex: "email", key: "email" },
-              { title: "Rol", dataIndex: "role", key: "role" },
-              {
-                title: "Acțiuni",
-                key: "actions",
-                render: (_, rec) => (
+  {
+    key: "users",
+    label: "Utilizatori",
+    children: (
+      <>
+        <div
+          style={{
+            display: "flex",
+            justifyContent: "space-between",
+            marginBottom: 16,
+            flexWrap: "wrap",
+            gap: 8,
+          }}
+        >
+          <h3>Gestionare utilizatori</h3>
+          <Space>
+            <Select
+              value={userRoleFilter}
+              style={{ width: 140 }}
+              onChange={setUserRoleFilter}
+              placeholder="Filtru rol"
+              allowClear
+            >
+              <Option value="all">Toate rolurile</Option>
+              <Option value="admin">Admin</Option>
+              <Option value="user">User</Option>
+            </Select>
+            <Select
+              value={userStatusFilter}
+              style={{ width: 140 }}
+              onChange={setUserStatusFilter}
+              placeholder="Filtru status"
+              allowClear
+            >
+              <Option value="all">Toate statusurile</Option>
+              <Option value="active">Activ</Option>
+              <Option value="inactive">Inactiv</Option>
+            </Select>
+            <Input.Search
+              placeholder="Caută nume/email"
+              allowClear
+              value={userSearch}
+              onChange={(e) => setUserSearch(e.target.value)}
+              style={{ width: 200 }}
+            />
+          </Space>
+        </div>
+        <Table
+          columns={[
+            { title: "Nume", dataIndex: "name", key: "name" },
+            { title: "Email", dataIndex: "email", key: "email" },
+            { title: "Rol", dataIndex: "role", key: "role" },
+            {
+              title: "Acțiuni",
+              key: "actions",
+              render: (_, rec) => (
+                <Space>
+                  <Button
+                    icon={<FileTextOutlined />}
+                    onClick={() => setSelectedUserId(rec.id)}
+                  >
+                    Istoric
+                  </Button>
                   <Popconfirm
                     title="Șterge?"
                     onConfirm={() => deleteUser(rec.id)}
                   >
                     <Button icon={<DeleteOutlined />} danger />
                   </Popconfirm>
-                ),
+                </Space>
+              ),
+            },
+          ]}
+          dataSource={filteredUsers}
+          rowKey="id"
+        />
+      </>
+    ),
+  },
+  {
+    key: "activity",
+    label: "Istoric acțiuni",
+    children: (
+      <Card title="Istoric acțiuni utilizatori">
+        <div style={{ marginBottom: 16 }}>
+          <Select
+            style={{ width: 300 }}
+            placeholder="Selectează utilizator"
+            value={selectedUserId}
+            onChange={setSelectedUserId}
+            allowClear
+          >
+            {users.map((user) => (
+              <Option key={`user-${user.id}`} value={user.id}>
+                {user.name} ({user.email})
+              </Option>
+            ))}
+          </Select>
+        </div>
+        <Table
+          columns={[
+            {
+              title: "Acțiune",
+              dataIndex: "action",
+              key: "action",
+            },
+            {
+              title: "Data și ora",
+              dataIndex: "timestamp",
+              key: "timestamp",
+              render: (timestamp) => {
+                if (!timestamp) return "-";
+                const d = new Date(timestamp);
+                return d.toLocaleString("ro-RO", {
+                  day: "2-digit",
+                  month: "2-digit",
+                  year: "numeric",
+                  hour: "2-digit",
+                  minute: "2-digit",
+                });
               },
-            ]}
-            dataSource={users}
-            rowKey="id"
-          />
-        </>
-      ),
-    },
-    {
-      key: "settings",
-      label: "Settings",
-      children: <Card title="Configurare sistem">{/* ... */}</Card>,
-    },
-  ];
+            },
+            {
+              title: "Detalii",
+              dataIndex: "details",
+              key: "details",
+            },
+          ]}
+          dataSource={userActivities}
+          rowKey="key"
+          loading={activityLoading}
+          locale={{ emptyText: "Selectați un utilizator pentru a afișa istoricul" }}
+          pagination={{ pageSize: 10 }}
+        />
+      </Card>
+    ),
+  },
+  {
+    key: "settings",
+    label: "Setări",
+    children: <Card title="Configurare sistem">{/* ... */}</Card>,
+  },
+];
 
   return (
     <Layout style={{ minHeight: "100vh" }}>
@@ -1527,56 +1657,77 @@ const confirmGenerateReport = async () => {
           {activeTab === "reports" && (
   <>
     {isActivityModalVisible && (
-  <Modal
-   title={`Adăugare activități pentru raport ${periodMapping[reportPeriod] || reportPeriod}`}
-    open={isActivityModalVisible}
-    onOk={reportSubdivision === "all" ? confirmGenerateAllReports : confirmGenerateReport}
-    onCancel={() => {
-      setIsActivityModalVisible(false);
-      setActivities([]);
-      setNewActivity('');
-    }}
-    okText="Generează raport"
-    cancelText="Anulează"
-    confirmLoading={loading}
-    width={700}
-  >
-    <div style={{ marginBottom: 16 }}>
-      <Input.TextArea
-        value={newActivity}
-        onChange={(e) => setNewActivity(e.target.value)}
-        placeholder="Descrie activitatea (ex: 'Organizat training pentru echipă')"
-        rows={3}
-      />
-      <Button
-        type="dashed"
-        onClick={handleAddActivity}
-        icon={<PlusOutlined />}
-        style={{ marginTop: 8 }}
-      >
-        Adaugă activitate
-      </Button>
-    </div>
-
-    <List
-      bordered
-      dataSource={activities}
-      renderItem={(item, index) => (
-        <List.Item
-          actions={[
-            <Button
-              icon={<DeleteOutlined />}
-              onClick={() => setActivities(activities.filter((_, i) => i !== index))}
-              danger
-              size="small"
-            />
-          ]}
-        >
-          {item}
-        </List.Item>
-      )}
+ <Modal
+  title={`Adăugare activități pentru raport ${periodMapping[reportPeriod] || reportPeriod}`}
+  open={isActivityModalVisible}
+  onOk={reportSubdivision === "all" ? confirmGenerateAllReports : confirmGenerateReport}
+  onCancel={() => {
+    setIsActivityModalVisible(false);
+    setActivities([]);
+    setNewActivity('');
+  }}
+  okText="Generează raport"
+  cancelText="Anulează"
+  confirmLoading={loading}
+  width={700}
+>
+  <div style={{ marginBottom: 16 }}>
+    <Input.TextArea
+      value={newActivity}
+      onChange={(e) => {
+        if (e.target.value.length <= 500) {
+          setNewActivity(e.target.value);
+        } else {
+          message.error("Activitatea nu poate depăși 500 de caractere!");
+        }
+      }}
+      placeholder="Descrie activitatea (ex: 'Organizat training pentru echipă')"
+      rows={3}
+      maxLength={500} // Limitează lungimea maximă
     />
-  </Modal>
+    <div style={{ textAlign: 'right', color: '#888' }}>
+      {newActivity.length}/500 caractere
+    </div>
+    <Button
+      type="dashed"
+      onClick={() => {
+        if (newActivity.trim().length === 0) {
+          message.error("Activitatea nu poate fi goală!");
+          return;
+        }
+        if (newActivity.length > 500) {
+          message.error("Activitatea este prea lungă!");
+          return;
+        }
+        handleAddActivity();
+      }}
+      icon={<PlusOutlined />}
+      style={{ marginTop: 8 }}
+    >
+      Adaugă activitate
+    </Button>
+  </div>
+
+  <List
+    bordered
+    pagination={{ pageSize: 5 }}
+    dataSource={activities}
+    renderItem={(item, index) => (
+      <List.Item
+        actions={[
+          <Button
+            icon={<DeleteOutlined />}
+            onClick={() => setActivities(activities.filter((_, i) => i !== index))}
+            danger
+            size="small"
+          />
+        ]}
+      >
+        {item.length > 100 ? `${item.slice(0, 100)}...` : item} 
+      </List.Item>
+    )}
+  />
+</Modal>
 )}
 
     <div
@@ -1613,7 +1764,13 @@ const confirmGenerateReport = async () => {
         <Button
           type="primary"
           icon={<DownloadOutlined />}
-          onClick={() => setIsActivityModalVisible(true)}
+          onClick={() => {
+          if (reportSubdivision === "all") {
+            confirmGenerateAllReports(); // Generează direct fără modal
+          } else {
+            setIsActivityModalVisible(true); // Deschide modalul pentru subdiviziune individuală
+          }
+        }}
           loading={loading}
         >
           {reportSubdivision === "all" 
@@ -1625,9 +1782,9 @@ const confirmGenerateReport = async () => {
     <Table
       dataSource={filteredReports}
       columns={[
-        { 
-          title: "Titlu", 
-          dataIndex: "title", 
+                {
+          title: "Titlu",
+          dataIndex: "title",
           key: "title",
           render: (title, record) => (
             <div>
@@ -1635,12 +1792,15 @@ const confirmGenerateReport = async () => {
               {record.activities && record.activities.length > 0 && (
                 <div style={{ marginTop: 4 }}>
                   <small style={{ color: '#666' }}>
-                    <strong>Activități:</strong> {record.activities.join(', ')}
+                    <strong>Activități:</strong>{' '}
+                    {record.activities
+                      .map((activity) => activity.slice(0, 50) + (activity.length > 50 ? '...' : '')) 
+                      .join(', ')}
                   </small>
                 </div>
               )}
             </div>
-          )
+          ),
         },
         {
           title: "Data",
@@ -1695,5 +1855,7 @@ const confirmGenerateReport = async () => {
     </Layout>
   );
 };
+
+
 
 export default Dashboard;
