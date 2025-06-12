@@ -6,6 +6,8 @@ const authMiddleware = require('../middlewares/authMiddleware');
 // Generare raport săptămânal (necesită autentificare)
 router.post('/weekly', authMiddleware.authenticate, reportController.generateWeeklyReport);
 
+// Generare raport lunar (necesită autentificare)
+router.post('/monthly', authMiddleware.authenticate, reportController.generateMonthlyReport);
 // Generare raport trimestrial (necesită autentificare)
 router.post('/quarterly', authMiddleware.authenticate, reportController.generateQuarterlyReport);
 

@@ -41,7 +41,12 @@ const handleReportGeneration = async (req, res, periodType) => {
         `Raport ${periodType} - ${subdivisionName}`,
         req.user.id,
         periodType,
-        new Date(new Date().setDate(new Date().getDate() - (periodType === 'annual' ? 365 : periodType === 'quarterly' ? 90 : 7))),
+        new Date(new Date().setDate(new Date().getDate() - (
+        periodType === 'annual' ? 365 :
+        periodType === 'quarterly' ? 90 :
+        periodType === 'monthly' ? 30 : 
+        7
+      ))),
         new Date(),
         JSON.stringify(result.downloadUrls),
         JSON.stringify(activities) // Salvează activitățile ca JSON
@@ -66,14 +71,19 @@ exports.generateAllReports = async (req, res) => {
   try {
     const { periodType, description, activities = [] } = req.body;
 
-    if (!['weekly', 'quarterly', 'annual'].includes(periodType)) {
+    if (!['weekly','monthly', 'quarterly', 'annual'].includes(periodType)) {
       return res.status(400).json({ message: 'Tip de raport invalid' });
     }
     
     const periodStart = new Date();
     periodStart.setDate(
-    periodStart.getDate() - (periodType === 'annual' ? 365 : periodType === 'quarterly' ? 90 : 7)
-    );
+    periodStart.getDate() - (
+    periodType === 'annual' ? 365 :
+    periodType === 'quarterly' ? 90 :
+    periodType === 'monthly' ? 30 : 
+    7
+  )
+);
 
     const result = await ReportService.generateAllSubdivisionReports(
       periodType,
@@ -110,6 +120,10 @@ exports.generateAllReports = async (req, res) => {
 
 exports.generateWeeklyReport = async (req, res) => {
   await handleReportGeneration(req, res, 'weekly');
+};
+
+exports.generateMonthlyReport = async (req, res) => {
+  await handleReportGeneration(req, res, 'monthly');
 };
 
 exports.generateQuarterlyReport = async (req, res) => {

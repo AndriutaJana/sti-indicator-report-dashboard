@@ -60,5 +60,7 @@ app.get('/api/reports/download/:filename', (req, res) => {
   });
 });
 
-const indicatorRecordRoutes = require('./routes/indicatorRecordRoutes'); // <-- Route is imported here
-app.use('/api/indicator-records', indicatorRecordRoutes); // <-- Route is used here
+const indicatorRecordRoutes = require('./routes/indicatorRecordRoutes'); 
+app.use('/api/indicator-records', indicatorRecordRoutes); 
+
+
