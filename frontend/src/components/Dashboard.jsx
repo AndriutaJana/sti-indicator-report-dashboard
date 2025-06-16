@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React , { useState, useEffect } from "react";
 import {
   BarChart,
   Bar,
@@ -322,11 +322,12 @@ const confirmGenerateAllReports = async () => {
       title: `Raport ${periodMapping[reportPeriod] || reportPeriod} - Toate subdiviziunile`,
       date: new Date().toISOString(),
       downloadUrls: response.data.downloadUrls,
-      activities: activities
+      activities: [...activities],
     };
 
     setReports((prev) => [newReport, ...prev]);
     message.success("Rapoarte generate cu succes!");
+    setIsActivityModalVisible(false);
   } catch (error) {
     console.error("Eroare detaliată:", error.response?.data || error.message);
     message.error(
@@ -335,8 +336,7 @@ const confirmGenerateAllReports = async () => {
     );
   } finally {
     setLoading(false);
-    setIsActivityModalVisible(false);
-    setActivities([]);
+    
   }
 };
 
@@ -353,6 +353,7 @@ const confirmGenerateAllReports = async () => {
 
   const periodMapping = {
     weekly: "săptămânal",
+    monthly: "lunar",
     quarterly: "trimestrial",
     annual: "anual",
   };
@@ -862,13 +863,12 @@ const confirmGenerateReport = async () => {
       key: `report-${Date.now()}`,
       fileName: response.data.downloadUrls.pdf,
       downloadUrls: response.data.downloadUrls,
-      activities: activities // Salvează activitățile în starea locală
+      activities: [...activities], // Salvează activitățile în starea locală
     };
 
     setReports((prev) => [newReport, ...prev]);
     message.success("Raport generat cu succes!");
     setIsActivityModalVisible(false);
-    setActivities([]);
   } catch (err) {
     console.error("Eroare generare raport:", err);
     message.error("Eroare la generarea raportului");
@@ -1758,6 +1758,7 @@ const confirmGenerateReport = async () => {
           onChange={setReportPeriod}
         >
           <Option value="weekly">Săptămânal</Option>
+          <Option value="monthly">Lunar</Option>  
           <Option value="quarterly">Trimestrial</Option>
           <Option value="annual">Anual</Option>
         </Select>
