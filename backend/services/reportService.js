@@ -41,6 +41,10 @@ class ReportService {
         periodStart.setDate(periodStart.getDate() - 7);
         periodName = 'săptămânal';
         break;
+        case 'monthly':
+        periodStart.setDate(periodStart.getDate() - 30);
+        periodName = 'lunar';
+        break;
       case 'quarterly':
         periodStart.setMonth(periodStart.getMonth() - 3);
         periodName = 'trimestrial';
@@ -282,6 +286,10 @@ static async generateCombinedExcel(allData, fileName) {
           periodStart.setDate(periodStart.getDate() - 7);
           periodName = 'săptămânal';
           break;
+          case 'monthly':
+          periodStart.setDate(periodStart.getDate() - 30);
+          periodName = 'lunar';
+        break;
         case 'quarterly':
           periodStart.setMonth(periodStart.getMonth() - 3);
           periodName = 'trimestrial';
@@ -297,6 +305,9 @@ static async generateCombinedExcel(allData, fileName) {
       
       // Obține datele
       const data = await this.getReportData(subdivisionId, periodStart);
+      if (!data) {
+        throw new Error('Nu există indicatori activi pentru subdiviziunea selectată');
+      }
 
       // Obține numele subdiviziunii
       const subdivisionQuery = await query(
