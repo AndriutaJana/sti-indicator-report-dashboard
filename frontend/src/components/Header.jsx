@@ -11,10 +11,11 @@ const Header = () => {
   const handleMenuClick = ({ key }) => {
     if (key === 'logout') {
       logout()
+      navigate('/login') // Redirecționează la login după logout
     }
     if (key === 'profile') {
-      // navigare la profil dacă e cazul
-      navigate('/profile')
+      // Navigare către Dashboard în loc de profil
+      navigate('/dashboard')
     }
   }
 
@@ -22,7 +23,7 @@ const Header = () => {
     {
       key: 'profile',
       icon: <UserOutlined />,
-      label: 'Profil',
+      label: 'Dashboard',
     },
     {
       key: 'logout',
@@ -40,6 +41,8 @@ const Header = () => {
             src="/images/sti_logo.png" 
             alt="STI logo" 
             className="h-12 w-auto" 
+            onClick={() => navigate('/dashboard')} // Adaugă navigare la dashboard la click pe logo
+            style={{ cursor: 'pointer' }}
           />
         </div> 
 
@@ -48,15 +51,15 @@ const Header = () => {
             <Dropdown 
               menu={{ items: menuItems, onClick: handleMenuClick }} 
               placement="bottomRight"
+              trigger={['click']}
             >
               <div className="flex items-center gap-2 cursor-pointer">
                 <Avatar 
                   size="default" 
                   icon={<UserOutlined />} 
                   src={currentUser.avatar}
-                  
                 />
-                <span className="font-medium ">{currentUser.username}</span>
+                <span className="font-medium">{currentUser.username}</span>
               </div>
             </Dropdown>
           ) : (
